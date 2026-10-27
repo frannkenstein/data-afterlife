@@ -93,6 +93,7 @@ describe("deterministic analysis", () => {
     const mistaken = { intent: "aggregate" as const, operation: "max" as const, column: "amount", filters: [] };
     expect(alignTimeGrouping("Which year has the highest amount?", mistaken, "amount", "date")).toEqual(plan);
     expect(alignTimeGrouping("Which quarter had the lowest average amount?", mistaken, "amount", "date")).toMatchObject({ intent: "group", period: "quarter", operation: "average", direction: "asc" });
+    expect(explicitQuestionPlan("Which quarter had the lowest average amount?")).toBeNull();
     expect(alignTimeGrouping("What is the highest individual amount?", mistaken, "amount", "date")).toEqual(mistaken);
     expect(verifyQuestionPlan("Which year has the highest amount?", { intent: "aggregate", operation: "max", column: "amount", filters: [] }, "amount", "date").intent).toBe("unsupported");
     expect(verifyQuestionPlan("Which year has the highest amount?", { ...plan, period: "month" }, "amount", "date").intent).toBe("unsupported");

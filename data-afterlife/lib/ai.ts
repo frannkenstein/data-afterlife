@@ -77,7 +77,7 @@ export function explicitQuestionPlan(question: string, measureColumn?: string): 
     if (!qualified && /\bhalf\s+of\s+(?:the\s+)?total\b/.test(text) && !/\b(month|category|group|average|mean)\b/.test(text)) return { intent: "half_total" };
     return unsupported("I can calculate half of the overall total, but this wording is ambiguous.");
   }
-  if (/\b(double|twice|triple|percent(?:age)?|ratio|multiply|divid(?:e|ed)|quarter)\b/.test(text)) {
+  if (/\b(double|twice|triple|percent(?:age)?|ratio|multiply|divid(?:e|ed))\b/.test(text) || /\bquarter\s+of\b/.test(text)) {
     return unsupported("That calculation is not supported yet.");
   }
   return null;
