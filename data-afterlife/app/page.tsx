@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { parseMonth, parseNumber, type Analysis, type Mapping } from "@/lib/analysis";
 import { AiInsights, AskDataAfterlife } from "@/components/ai-panel";
 import { MAX_BYTES, type Dataset } from "@/lib/csv";
@@ -65,5 +65,32 @@ function Dashboard({ result, mapping, rows, columns }: { result: Analysis; mappi
 }
 
 function ChartPanel({ title, groups, kind, format, empty }: { title: string; groups: { label: string; total: number }[]; kind: "line" | "bar"; format: (value: number) => string; empty: string }) {
-  return <div className="rounded-2xl border border-[#cbd2c7] bg-white p-6"><h3 className="text-xl font-semibold">{title}</h3>{groups.length ? <><div className="mt-5 h-64" role="img" aria-label={`${title} chart`}><ResponsiveContainer width="100%" height="100%">{kind === "line" ? <LineChart data={groups}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis /><Tooltip formatter={(value) => format(Number(value))} /><Line dataKey="total" stroke="#285640" strokeWidth={3} /></LineChart> : <BarChart data={groups.slice(0, 10)}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis /><Tooltip formatter={(value) => format(Number(value))} /><Bar dataKey="total" fill="#56806a" /></BarChart>}</ResponsiveContainer></div><table className="mt-4 w-full text-sm"><thead><tr><th className="py-2 text-left">{kind === "line" ? "Month" : "Category"}</th><th className="py-2 text-right">Total</th></tr></thead><tbody>{groups.slice(0, 10).map((group) => <tr key={group.label} className="border-t border-[#e5e9e2]"><td className="py-2">{group.label}</td><td className="py-2 text-right">{format(group.total)}</td></tr>)}</tbody></table></> : <p className="mt-5 text-[#657168]">{empty}</p>}</div>;
+  const [selectedType, setSelectedType] = useState<"line" | "bar" | "area" | "pie">(kind);
+  const chartData = kind === "bar" ? groups.slice(0, 10) : groups;
+  const pieAvailable = chartData.length > 0 && chartData.every((group) => group.total >= 0) && chartData.some((group) => group.total > 0);
+  const chartType = selectedType === "pie" && !pieAvailable ? "bar" : selectedType;
+  const options = kind === "line" ? ["line", "bar", "area"] as const : ["bar", "pie"] as const;
+
+  return <div className="rounded-2xl border border-[#cbd2c7] bg-white p-6">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <h3 className="text-xl font-semibold">{title}</h3>
+      <label className="flex items-center gap-2 text-sm text-[#657168]">
+        Chart type
+        <select aria-label={`${title} chart type`} value={chartType} onChange={(event) => setSelectedType(event.target.value as typeof selectedType)} className="cursor-pointer rounded-lg border border-[#cbd2c7] bg-white px-3 py-2 text-[#20372b]">
+          {options.map((option) => <option key={option} value={option} disabled={option === "pie" && !pieAvailable}>{option[0].toUpperCase() + option.slice(1)}</option>)}
+        </select>
+      </label>
+    </div>
+    {groups.length ? <>
+      <div className="mt-5 h-64" role="img" aria-label={`${title} ${chartType} chart`}>
+        <ResponsiveContainer width="100%" height="100%">
+          {chartType === "line" ? <LineChart data={chartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis /><Tooltip formatter={(value) => format(Number(value))} /><Line dataKey="total" stroke="#285640" strokeWidth={3} /></LineChart>
+            : chartType === "area" ? <AreaChart data={chartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis /><Tooltip formatter={(value) => format(Number(value))} /><Area dataKey="total" stroke="#285640" fill="#a9c5b2" /></AreaChart>
+              : chartType === "pie" ? <PieChart><Tooltip formatter={(value) => format(Number(value))} /><Pie data={chartData} dataKey="total" nameKey="label" outerRadius={90} label>{chartData.map((group, index) => <Cell key={group.label} fill={["#285640", "#56806a", "#8aac94", "#b7cda8", "#d4ad79", "#8b9db1"][index % 6]} />)}</Pie></PieChart>
+                : <BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis /><Tooltip formatter={(value) => format(Number(value))} /><Bar dataKey="total" fill="#56806a" /></BarChart>}
+        </ResponsiveContainer>
+      </div>
+      <table className="mt-4 w-full text-sm"><thead><tr><th className="py-2 text-left">{kind === "line" ? "Month" : "Category"}</th><th className="py-2 text-right">Total</th></tr></thead><tbody>{groups.slice(0, 10).map((group) => <tr key={group.label} className="border-t border-[#e5e9e2]"><td className="py-2">{group.label}</td><td className="py-2 text-right">{format(group.total)}</td></tr>)}</tbody></table>
+    </> : <p className="mt-5 text-[#657168]">{empty}</p>}
+  </div>;
 }
