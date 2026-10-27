@@ -40,7 +40,7 @@ export function AskDataAfterlife({ result, mapping }: Props) {
 
   return <section className="rounded-2xl border border-[#cbd2c7] bg-white p-6" aria-labelledby="ask-heading">
     <h3 id="ask-heading" className="text-xl font-semibold">Ask DataAfterlife</h3>
-    <p className="mt-2 text-sm text-[#657168]">Gemma chooses a supported question type; this browser computes the answer. Your question is sent to local Ollama and may contain personal details.</p>
+    <p className="mt-2 text-sm text-[#657168]">The browser computes every answer. Some questions are interpreted locally; others are sent to local Ollama and could contain personal details.</p>
     <form className="mt-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); void ask(); }}><input className="min-w-0 flex-1 rounded-lg border border-[#a8b9a9] p-3" aria-label="Question about this dataset" maxLength={300} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={`What is the total of ${mapping.measure}?`} /><button disabled={busy} className="rounded-lg bg-[#285640] px-4 font-semibold text-white disabled:opacity-50">Ask</button></form>
     <div className="mt-3 flex flex-wrap gap-2">{suggestions.map((suggestion) => <button key={suggestion} className="rounded-full border border-[#a8b9a9] px-3 py-1 text-sm" onClick={() => void ask(suggestion)}>{suggestion}</button>)}</div>
     {answer && <div className="mt-5 rounded-lg bg-[#e8eee7] p-4"><p className="text-xl font-semibold">{answer.answer}</p><p className="mt-2 text-sm">{answer.breakdown}</p></div>}

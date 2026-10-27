@@ -16,12 +16,37 @@ export function makePacket(result: Analysis): z.infer<typeof packetSchema> {
 export const queryPlanSchema = z.discriminatedUnion("intent", [
   z.object({ intent: z.literal("total") }).strict(),
   z.object({ intent: z.literal("average") }).strict(),
+  z.object({ intent: z.literal("half_total") }).strict(),
   z.object({ intent: z.literal("extreme_month"), direction: z.enum(["highest", "lowest"]) }).strict(),
   z.object({ intent: z.literal("extreme_category"), direction: z.enum(["highest", "lowest"]) }).strict(),
   z.object({ intent: z.literal("change_month"), from: z.string().regex(/^\d{4}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}$/) }).strict(),
   z.object({ intent: z.literal("unsupported"), reason: z.string().max(150) }).strict(),
 ]);
 export type QueryPlan = z.infer<typeof queryPlanSchema>;
+
+const unsupported = (reason: string): QueryPlan => ({ intent: "unsupported", reason });
+
+export function explicitQuestionPlan(question: string): QueryPlan | null {
+  const text = question.trim().toLowerCase();
+  if (/\bhalf\b/.test(text)) {
+    if (/\bhalf\s+of\s+(?:the\s+)?total\b/.test(text) && !/\b(month|category|group|average|mean)\b/.test(text)) return { intent: "half_total" };
+    return unsupported("I can calculate half of the overall total, but this wording is ambiguous.");
+  }
+  if (/\b(double|twice|triple|percent(?:age)?|median|ratio|multiply|divid(?:e|ed)|quarter|third)\b/.test(text)) {
+    return unsupported("That calculation is not supported yet.");
+  }
+  return null;
+}
+
+export function verifyQuestionPlan(question: string, plan: QueryPlan): QueryPlan {
+  const explicit = explicitQuestionPlan(question);
+  if (explicit) return explicit;
+  const text = question.toLowerCase();
+  if (plan.intent === "half_total") return unsupported("The question does not clearly ask for half of the overall total.");
+  if (plan.intent === "average" && !/\b(average|mean)\b/.test(text)) return unsupported("The question does not clearly ask for an average.");
+  if (plan.intent === "total" && !/\b(total|sum)\b/.test(text)) return unsupported("The question does not clearly ask for a total.");
+  return plan;
+}
 
 export function answerQuestion(plan: QueryPlan, result: Analysis, mapping: Mapping): { answer: string; breakdown: string } {
   const unit = mapping.unit ? ` ${mapping.unit}` : " units (unit not specified)";
@@ -30,6 +55,7 @@ export function answerQuestion(plan: QueryPlan, result: Analysis, mapping: Mappi
   if (!result.count) return { answer: "No valid numeric rows are available.", breakdown: "Check the measure and normalization settings." };
   if (plan.intent === "total") return { answer: number(result.sum), breakdown: `Sum of ${result.count} valid ${mapping.measure} values.` };
   if (plan.intent === "average") return { answer: number(result.average), breakdown: `Total ${number(result.sum)} ÷ ${result.count} valid rows.` };
+  if (plan.intent === "half_total") return { answer: number(result.sum / 2), breakdown: `Half of the overall total: ${number(result.sum)} ÷ 2.` };
   if (plan.intent === "extreme_month" || plan.intent === "extreme_category") {
     const groups = plan.intent === "extreme_month" ? result.months : result.categories;
     if (!groups.length) return { answer: "No matching groups are available.", breakdown: "Check the selected date or category column." };
