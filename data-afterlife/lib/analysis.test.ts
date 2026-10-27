@@ -44,5 +44,23 @@ describe("deterministic analysis", () => {
     const result = analyze(dataset.rows, mapping);
     expect(result.sum).toBeCloseTo(236465.6);
     expect(answerQuestion({ intent: "half_total" }, result, mapping).answer).toContain("118,232.8");
+    expect(answerQuestion({ intent: "extreme_month", direction: "highest" }, result, mapping).answer).toContain("2023-05: 15,803.54");
+    expect(answerQuestion({ intent: "second_highest_month" }, result, mapping).answer).toContain("2023-07: 15,779.98");
+  });
+  it("distinguishes highest and second-highest months", () => {
+    const result = analyze(rows, mapping);
+    const secondQuestion = "Which month had the second highest amount?";
+    const plan = explicitQuestionPlan(secondQuestion);
+    expect(plan).toEqual({ intent: "second_highest_month" });
+    expect(verifyQuestionPlan(secondQuestion, { intent: "extreme_month", direction: "highest" })).toEqual(plan);
+    expect(answerQuestion({ intent: "extreme_month", direction: "highest" }, result, mapping).answer).toContain("2024-03: 2,000");
+    expect(answerQuestion(plan!, result, mapping).answer).toContain("2024-02: 1,000");
+    expect(explicitQuestionPlan("Which category had the second highest amount?")?.intent).toBe("unsupported");
+  });
+  it("handles tied and unavailable second-highest totals", () => {
+    const tied = analyze([{ date: "2024-01-01", category: "A", amount: "20" }, { date: "2024-02-01", category: "A", amount: "10" }, { date: "2024-03-01", category: "A", amount: "10" }], mapping);
+    expect(answerQuestion({ intent: "second_highest_month" }, tied, mapping).answer).toContain("2024-02, 2024-03: 10");
+    const oneMonth = analyze([{ date: "2024-01-01", category: "A", amount: "20" }], mapping);
+    expect(answerQuestion({ intent: "second_highest_month" }, oneMonth, mapping).answer).toBe("No second-highest month is available.");
   });
 });

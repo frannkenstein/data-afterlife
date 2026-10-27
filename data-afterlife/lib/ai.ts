@@ -17,6 +17,7 @@ export const queryPlanSchema = z.discriminatedUnion("intent", [
   z.object({ intent: z.literal("total") }).strict(),
   z.object({ intent: z.literal("average") }).strict(),
   z.object({ intent: z.literal("half_total") }).strict(),
+  z.object({ intent: z.literal("second_highest_month") }).strict(),
   z.object({ intent: z.literal("extreme_month"), direction: z.enum(["highest", "lowest"]) }).strict(),
   z.object({ intent: z.literal("extreme_category"), direction: z.enum(["highest", "lowest"]) }).strict(),
   z.object({ intent: z.literal("change_month"), from: z.string().regex(/^\d{4}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}$/) }).strict(),
@@ -28,6 +29,10 @@ const unsupported = (reason: string): QueryPlan => ({ intent: "unsupported", rea
 
 export function explicitQuestionPlan(question: string): QueryPlan | null {
   const text = question.trim().toLowerCase();
+  if (/\b(second|2nd|runner[\s-]?up)\b/.test(text)) {
+    if (/\b(highest|largest|biggest)\b/.test(text) && /\bmonths?\b/.test(text)) return { intent: "second_highest_month" };
+    return unsupported("I can answer the second-highest month, but this wording is not clear enough.");
+  }
   if (/\bhalf\b/.test(text)) {
     if (/\bhalf\s+of\s+(?:the\s+)?total\b/.test(text) && !/\b(month|category|group|average|mean)\b/.test(text)) return { intent: "half_total" };
     return unsupported("I can calculate half of the overall total, but this wording is ambiguous.");
@@ -43,6 +48,7 @@ export function verifyQuestionPlan(question: string, plan: QueryPlan): QueryPlan
   if (explicit) return explicit;
   const text = question.toLowerCase();
   if (plan.intent === "half_total") return unsupported("The question does not clearly ask for half of the overall total.");
+  if (plan.intent === "second_highest_month") return unsupported("The question does not clearly ask for the second-highest month.");
   if (plan.intent === "average" && !/\b(average|mean)\b/.test(text)) return unsupported("The question does not clearly ask for an average.");
   if (plan.intent === "total" && !/\b(total|sum)\b/.test(text)) return unsupported("The question does not clearly ask for a total.");
   return plan;
@@ -56,6 +62,14 @@ export function answerQuestion(plan: QueryPlan, result: Analysis, mapping: Mappi
   if (plan.intent === "total") return { answer: number(result.sum), breakdown: `Sum of ${result.count} valid ${mapping.measure} values.` };
   if (plan.intent === "average") return { answer: number(result.average), breakdown: `Total ${number(result.sum)} ÷ ${result.count} valid rows.` };
   if (plan.intent === "half_total") return { answer: number(result.sum / 2), breakdown: `Half of the overall total: ${number(result.sum)} ÷ 2.` };
+  if (plan.intent === "second_highest_month") {
+    const ranked = [...result.months].sort((a, b) => b.total - a.total);
+    if (ranked.length < 2) return { answer: "No second-highest month is available.", breakdown: "At least two months with valid totals are needed." };
+    const second = ranked.find((month) => month.total < ranked[0].total - 1e-9);
+    if (!second) return { answer: "No distinct second-highest total is available.", breakdown: "All monthly totals are tied." };
+    const tied = ranked.filter((month) => Math.abs(month.total - second.total) < 1e-9);
+    return { answer: `${tied.map((month) => month.label).join(", ")}: ${number(second.total)}`, breakdown: `Second distinct monthly total among ${ranked.length} months. Highest: ${ranked[0].label} at ${number(ranked[0].total)}.` };
+  }
   if (plan.intent === "extreme_month" || plan.intent === "extreme_category") {
     const groups = plan.intent === "extreme_month" ? result.months : result.categories;
     if (!groups.length) return { answer: "No matching groups are available.", breakdown: "Check the selected date or category column." };

@@ -35,6 +35,7 @@ export function AskDataAfterlife({ result, mapping }: Props) {
     `What is the total of ${mapping.measure}?`,
     `What is the average of ${mapping.measure}?`,
     ...(mapping.date ? [`Which month had the highest ${mapping.measure}?`] : []),
+    ...(mapping.date ? [`Which month had the second highest ${mapping.measure}?`] : []),
     ...(mapping.category ? [`Which ${mapping.category} had the highest total ${mapping.measure}?`] : []),
   ];
 

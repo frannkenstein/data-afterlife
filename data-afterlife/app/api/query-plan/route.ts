@@ -8,8 +8,11 @@ export async function POST(request: Request) {
   try {
     const input = requestSchema.parse(await readLimitedJson(request, 2_000));
     const explicit = explicitQuestionPlan(input.question);
-    if (explicit) return Response.json({ plan: explicit });
-    const candidate = queryPlanSchema.parse(await ollamaJson(`Classify this question into one plan. Allowed: total, average, extreme_month (highest/lowest), extreme_category (highest/lowest), change_month (from/to YYYY-MM), unsupported. Use unsupported if ambiguous or outside this set. Never map half, fractions, percentages, or other calculations to average. Date mapped: ${input.hasDate}; category mapped: ${input.hasCategory}. Question: ${JSON.stringify(input.question)}`, z.toJSONSchema(queryPlanSchema)));
+    if (explicit) {
+      if (explicit.intent === "second_highest_month" && !input.hasDate) return Response.json({ plan: { intent: "unsupported", reason: "Map a date column first." } });
+      return Response.json({ plan: explicit });
+    }
+    const candidate = queryPlanSchema.parse(await ollamaJson(`Classify this question into one plan. Allowed: total, average, extreme_month (highest/lowest), second_highest_month, extreme_category (highest/lowest), change_month (from/to YYYY-MM), unsupported. Use unsupported if ambiguous or outside this set. Never map second-highest to highest, or half/fractions/percentages to average. Date mapped: ${input.hasDate}; category mapped: ${input.hasCategory}. Question: ${JSON.stringify(input.question)}`, z.toJSONSchema(queryPlanSchema)));
     const plan = verifyQuestionPlan(input.question, candidate);
     if ((plan.intent === "extreme_month" || plan.intent === "change_month") && !input.hasDate || plan.intent === "extreme_category" && !input.hasCategory) return Response.json({ plan: { intent: "unsupported", reason: "Map the required date or category column first." } });
     return Response.json({ plan });
