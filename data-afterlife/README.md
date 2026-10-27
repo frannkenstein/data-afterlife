@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DataAfterlife
 
-## Getting Started
+Explore a historical CSV in your browser, then ask a local Gemma model to select useful aggregate facts and interpret a small set of questions. All numbers are calculated from CSV rows in browser-side TypeScript.
 
-First, run the development server:
+## Run locally
+
+Requires Node.js 20+, npm, and [Ollama](https://ollama.com/). From this directory:
 
 ```bash
+npm install
+ollama pull gemma3:4b
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000>. Use **Try synthetic sample** for the six-row fictional expense CSV. It should total 3,800 units; monthly totals are 800, 1,000, and 2,000. AI controls remain optional if Ollama is unavailable.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npx vitest run
+npm run lint
+npx tsc --noEmit
+npm run build
+```
 
-## Learn More
+## Data boundaries and limits
 
-To learn more about Next.js, take a look at the following resources:
+CSV bytes and rows stay in browser memory and disappear on reload. The two local API routes receive only selected aggregate facts or a question plus mapping availability. Fact packets may include category labels; questions and labels can contain sensitive information, so preview the packet and use the AI controls only when comfortable sending them to your local Ollama service. A hosted deployment has different privacy properties and cannot use a visitor's local Ollama through these server routes.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Input is limited to one UTF-8 CSV under 5 MB, 10,000 rows, and 50 columns. Numeric parsing does not infer currencies or grouping separators; enable those options explicitly. Dates default to ISO `YYYY-MM-DD`; choose `DD/MM/YYYY` or `MM/DD/YYYY` explicitly for slash dates. Missing and invalid numeric values are excluded and counted. Invalid dates are excluded from monthly groups but still count toward overall numeric statistics. Data quality in the source remains the user's responsibility.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Questions are limited to total, average, highest/lowest month, highest/lowest category, and month-to-month change. Gemma creates a strict query plan; the browser computes the answer. The model selects evidence IDs for insights, and the app renders fixed, verified statements from the corresponding facts. The AI cannot run code or change calculated values.

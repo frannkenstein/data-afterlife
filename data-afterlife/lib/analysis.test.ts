@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { analyze, parseMonth, parseNumber, type Mapping } from "./analysis";
+import { answerQuestion, queryPlanSchema } from "./ai";
 
 const mapping: Mapping = { measure: "amount", date: "date", category: "category", dateFormat: "iso", unit: "", stripCurrency: false, groupSeparator: false };
 const rows = [
@@ -20,5 +21,11 @@ describe("deterministic analysis", () => {
     expect(parseNumber("$1,000", mapping)).toBeNaN();
     expect(parseMonth("03/04/2024", "iso")).toBeNull();
     expect(analyze([{ date: "2024-02-30", category: "A", amount: "bad" }, { date: "", category: "A", amount: "" }], mapping)).toMatchObject({ count: 0, invalid: 1, missing: 1 });
+  });
+  it("answers only validated supported plans from computed groups", () => {
+    const result = analyze(rows, mapping);
+    expect(answerQuestion({ intent: "extreme_month", direction: "highest" }, result, mapping).answer).toContain("2024-03: 2,000");
+    expect(answerQuestion({ intent: "change_month", from: "2024-01", to: "2024-03" }, result, mapping).answer).toContain("1,200");
+    expect(queryPlanSchema.safeParse({ intent: "total", code: "alert(1)" }).success).toBe(false);
   });
 });
