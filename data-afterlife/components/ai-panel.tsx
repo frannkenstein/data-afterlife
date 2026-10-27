@@ -23,14 +23,16 @@ export function AskDataAfterlife({ result, mapping, rows, columns }: AskProps) {
   const [answer, setAnswer] = useState<QueryResult | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState<"interpreting" | "calculating">("interpreting");
 
   async function ask(value = question) {
-    if (!value.trim()) return;
-    setBusy(true); setMessage(""); setAnswer(null); setQuestion(value);
+    if (!value.trim() || busy) return;
+    setBusy(true); setStage("interpreting"); setMessage(""); setAnswer(null); setQuestion(value);
     try {
       const data = await request("/api/query-plan", { question: value, hasDate: !!mapping.date, hasCategory: !!mapping.category, columns, measureColumn: mapping.measure, dateColumn: mapping.date });
       const plan: QueryPlan = queryPlanSchema.parse(data.plan);
       if (plan.intent === "aggregate" || plan.intent === "ranked_rows" || plan.intent === "group") {
+        setStage("calculating");
         setAnswer(await runCsvWorker<QueryResult>({ kind: "query", rows, columns, mapping, plan: plan as GenericPlan }));
       } else {
         setAnswer({ ...answerQuestion(plan, result, mapping), details: [] });
@@ -53,8 +55,9 @@ export function AskDataAfterlife({ result, mapping, rows, columns }: AskProps) {
   return <section className="rounded-2xl border border-[#cbd2c7] bg-white p-6" aria-labelledby="ask-heading">
     <h3 id="ask-heading" className="text-xl font-semibold">Ask DataAfterlife</h3>
     <p className="mt-2 text-sm text-[#657168]">Ask about totals, filters, rankings, groups, or individual values. Gemma interprets the question using column names; the browser calculates from the rows. Some questions cannot be answered from the CSV.</p>
-    <form className="mt-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); void ask(); }}><input className="min-w-0 flex-1 rounded-lg border border-[#a8b9a9] p-3" aria-label="Question about this dataset" maxLength={300} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={`What is the total of ${mapping.measure}?`} /><button disabled={busy} className="rounded-lg bg-[#285640] px-4 font-semibold text-white disabled:opacity-50">Ask</button></form>
-    <div className="mt-3 flex flex-wrap gap-2">{suggestions.map((suggestion) => <button key={suggestion} className="rounded-full border border-[#a8b9a9] px-3 py-1 text-sm" onClick={() => void ask(suggestion)}>{suggestion}</button>)}</div>
+    <form className="mt-4 flex gap-2" onSubmit={(event) => { event.preventDefault(); void ask(); }}><input className="min-w-0 flex-1 rounded-lg border border-[#a8b9a9] p-3" aria-label="Question about this dataset" maxLength={300} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={`What is the total of ${mapping.measure}?`} /><button disabled={busy} className="inline-flex min-w-24 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#285640] px-4 font-semibold text-white disabled:cursor-wait disabled:opacity-70" aria-busy={busy}>{busy ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent motion-reduce:animate-none" aria-hidden="true" />Working…</> : "Ask"}</button></form>
+    <div className="mt-3 flex flex-wrap gap-2">{suggestions.map((suggestion) => <button key={suggestion} disabled={busy} className="cursor-pointer rounded-full border border-[#a8b9a9] px-3 py-1 text-sm disabled:cursor-wait disabled:opacity-50" onClick={() => void ask(suggestion)}>{suggestion}</button>)}</div>
+    {busy && <div className="mt-5 rounded-lg bg-[#e8eee7] p-4" role="status" aria-live="polite"><p className="flex items-center gap-3 font-semibold"><span className="h-5 w-5 animate-spin rounded-full border-2 border-[#285640] border-t-transparent motion-reduce:animate-none" aria-hidden="true" />{stage === "interpreting" ? "Interpreting your question…" : "Calculating from your CSV…"}</p><p className="mt-2 text-sm text-[#657168]">This may take a moment while the local model prepares the calculation.</p></div>}
     {answer && <div className="mt-5 rounded-lg bg-[#e8eee7] p-4"><p className="text-xl font-semibold">{answer.answer}</p><p className="mt-2 text-sm">{answer.breakdown}</p>{(answer.details?.length ?? 0) > 0 && <dl className="mt-3 grid gap-1 text-sm">{answer.details.map((item, index) => <div key={`${item.label}-${index}`} className="flex justify-between gap-4 border-t border-[#ced8cd] py-1"><dt>{item.label}</dt><dd className="font-medium">{item.value}</dd></div>)}</dl>}</div>}
     {message && <p className="mt-5 rounded-lg bg-amber-50 p-4 text-amber-900" role="status">{message}</p>}
   </section>;
