@@ -6,6 +6,7 @@ import { parseMonth, parseNumber, type Analysis, type Mapping } from "@/lib/anal
 import { AiInsights, AskDataAfterlife } from "@/components/ai-panel";
 import { MAX_BYTES, type Dataset } from "@/lib/csv";
 import { runCsvWorker } from "@/lib/worker-client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function inferredType(rows: Record<string, string>[], column: string): string {
   const values = rows.slice(0, 100).map((row) => (row[column] ?? "").trim()).filter(Boolean);
@@ -94,12 +95,13 @@ function ChartPanel({ title, groups, kind, format, empty }: { title: string; gro
   return <div className="rounded-2xl border border-[#cbd2c7] bg-white p-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h3 className="text-xl font-semibold">{title}</h3>
-      <label className="flex items-center gap-2 text-sm text-[#657168]">
-        Chart type
-        <select aria-label={`${title} chart type`} value={chartType} onChange={(event) => setSelectedType(event.target.value as typeof selectedType)} className="cursor-pointer rounded-lg border border-[#cbd2c7] bg-white px-3 py-2 text-[#20372b]">
-          {options.map((option) => <option key={option} value={option} disabled={option === "pie" && !pieAvailable}>{option[0].toUpperCase() + option.slice(1)}</option>)}
-        </select>
-      </label>
+      <div className="flex items-center gap-2 text-sm text-[#657168]">
+        <span id={`${kind}-chart-type-label`}>Chart type</span>
+        <Select value={chartType} onValueChange={(value) => setSelectedType(value as typeof selectedType)}>
+          <SelectTrigger aria-labelledby={`${kind}-chart-type-label`}><SelectValue /></SelectTrigger>
+          <SelectContent>{options.map((option) => <SelectItem key={option} value={option} disabled={option === "pie" && !pieAvailable}>{option[0].toUpperCase() + option.slice(1)}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
     </div>
     {groups.length ? <>
       <div className="mt-5 h-64" role="img" aria-label={`${title} ${chartType} chart`}>
