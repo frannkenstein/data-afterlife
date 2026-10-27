@@ -38,7 +38,7 @@ export const queryPlanSchema = z.discriminatedUnion("intent", [
   z.object({ intent: z.literal("change_month"), from: z.string().regex(/^\d{4}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}$/) }).strict(),
   z.object({ intent: z.literal("aggregate"), operation: z.enum(["sum", "average", "median", "min", "max", "count", "distinct_count"]), column: z.string().max(100), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
   z.object({ intent: z.literal("ranked_rows"), sortColumn: z.string().max(100), direction: z.enum(["asc", "desc"]), limit: z.number().int().min(1).max(100), operation: z.enum(["average", "sum", "min", "max", "list"]), measureColumn: z.string().max(100), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
-  z.object({ intent: z.literal("group"), groupColumn: z.string().max(100), period: z.enum(["none", "month"]), measureColumn: z.string().max(100), operation: z.enum(["sum", "average", "count"]), direction: z.enum(["asc", "desc"]), limit: z.number().int().min(1).max(20), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
+  z.object({ intent: z.literal("group"), groupColumn: z.string().max(100), period: z.enum(["none", "year", "quarter", "month"]), measureColumn: z.string().max(100), operation: z.enum(["sum", "average", "count"]), direction: z.enum(["asc", "desc"]), limit: z.number().int().min(1).max(20), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
   z.object({ intent: z.literal("unsupported"), reason: z.string().max(150) }).strict(),
 ]);
 export type QueryPlan = z.infer<typeof queryPlanSchema>;
@@ -73,10 +73,13 @@ export function explicitQuestionPlan(question: string, measureColumn?: string): 
   return null;
 }
 
-export function verifyQuestionPlan(question: string, plan: QueryPlan, measureColumn?: string): QueryPlan {
+export function verifyQuestionPlan(question: string, plan: QueryPlan, measureColumn?: string, dateColumn?: string): QueryPlan {
   const explicit = explicitQuestionPlan(question, measureColumn);
   if (explicit) return explicit;
   const text = question.toLowerCase();
+  const requestedPeriod = /\b(year|yearly|annual|annually|per year)\b/.test(text) ? "year" : /\b(quarter|quarterly|per quarter)\b/.test(text) ? "quarter" : /\b(month|monthly|per month)\b/.test(text) ? "month" : null;
+  if (requestedPeriod && (plan.intent !== "group" || plan.period !== requestedPeriod || plan.groupColumn !== dateColumn)) return unsupported(`The proposed calculation does not group by ${requestedPeriod}.`);
+  if (plan.intent === "group" && plan.period !== "none" && !requestedPeriod && !/\b(date|time|period)\b/.test(text)) return unsupported("The proposed time grouping is not requested by the question.");
   if (plan.intent === "half_total") return unsupported("The question does not clearly ask for half of the overall total.");
   if (plan.intent === "second_highest_month") return unsupported("The question does not clearly ask for the second-highest month.");
   if (plan.intent === "average" && (!/\b(average|mean)\b/.test(text) || /\b(lowest|highest|smallest|largest|top|bottom|first|last)\b/.test(text))) return unsupported("The question asks for more than the overall average.");
@@ -88,6 +91,10 @@ export function verifyQuestionPlan(question: string, plan: QueryPlan, measureCol
   if (plan.intent === "group" || plan.intent === "aggregate") {
     if (/\b(average|mean)\b/.test(text) && plan.operation !== "average") return unsupported("The proposed calculation does not match the requested average.");
     if (/\b(total|sum)\b/.test(text) && !/\b(average|mean)\b/.test(text) && plan.operation !== "sum") return unsupported("The proposed calculation does not match the requested total.");
+  }
+  if (plan.intent === "group") {
+    if (/\b(highest|largest|biggest|most|top)\b/.test(text) && plan.direction !== "desc") return unsupported("The proposed group ranking is in the wrong direction.");
+    if (/\b(lowest|smallest|least|bottom)\b/.test(text) && plan.direction !== "asc") return unsupported("The proposed group ranking is in the wrong direction.");
   }
   return plan;
 }

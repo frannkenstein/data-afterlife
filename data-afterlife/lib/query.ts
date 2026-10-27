@@ -50,7 +50,7 @@ export function executeGenericQuery(rows: Record<string, string>[], columns: str
   if (plan.intent === "ranked_rows") referenced.push(plan.sortColumn, plan.measureColumn);
   if (plan.intent === "group") referenced.push(plan.groupColumn, plan.measureColumn);
   if (referenced.some((column) => !known.has(column))) throw new Error("The proposed question references a column outside this CSV.");
-  if (plan.intent === "group" && plan.period === "month" && plan.groupColumn !== mapping.date) throw new Error("Monthly grouping requires the selected date column.");
+  if (plan.intent === "group" && plan.period !== "none" && plan.groupColumn !== mapping.date) throw new Error("Time grouping requires the selected date column.");
 
   const filtered = rows.filter((row) => plan.filters.every((filter) => filterMatches(row[filter.column] ?? "", filter.operator, filter.value, mapping)));
   const baseDetails = [{ label: "Matching rows", value: filtered.length.toLocaleString() }];
@@ -81,7 +81,8 @@ export function executeGenericQuery(rows: Record<string, string>[], columns: str
 
   const groups = new Map<string, number[]>();
   for (const row of filtered) {
-    const label = plan.period === "month" ? parseMonth(row[plan.groupColumn] ?? "", mapping.dateFormat) : (row[plan.groupColumn] ?? "").trim();
+    const month = plan.period !== "none" ? parseMonth(row[plan.groupColumn] ?? "", mapping.dateFormat) : null;
+    const label = plan.period === "year" ? month?.slice(0, 4) : plan.period === "quarter" ? month && `${month.slice(0, 4)}-Q${Math.ceil(Number(month.slice(5, 7)) / 3)}` : plan.period === "month" ? month : (row[plan.groupColumn] ?? "").trim();
     if (!label) continue;
     const value = plan.operation === "count" ? 1 : numeric(row[plan.measureColumn] ?? "", mapping);
     if (value === null) continue;
@@ -90,5 +91,5 @@ export function executeGenericQuery(rows: Record<string, string>[], columns: str
   const ranked = [...groups].map(([label, values]) => ({ label, value: plan.operation === "count" ? values.length : aggregate(values, plan.operation) })).sort((a, b) => (plan.direction === "asc" ? a.value - b.value : b.value - a.value) || a.label.localeCompare(b.label)).slice(0, plan.limit);
   if (!ranked.length) return { answer: "No valid groups are available.", breakdown: "Check the grouping column and numeric values.", details: baseDetails };
   const measure = plan.operation === "count" ? "" : plan.measureColumn;
-  return { answer: ranked.map((item) => `${item.label}: ${format(item.value, measure, mapping)}`).join(" · "), breakdown: `${plan.operation} by ${plan.period === "month" ? "month" : plan.groupColumn}, ordered ${plan.direction === "asc" ? "lowest" : "highest"} first.`, details: ranked.map((item) => ({ label: item.label, value: format(item.value, measure, mapping) })) };
+  return { answer: ranked.map((item) => `${item.label}: ${format(item.value, measure, mapping)}`).join(" · "), breakdown: `${plan.operation} by ${plan.period === "none" ? plan.groupColumn : plan.period}, ordered ${plan.direction === "asc" ? "lowest" : "highest"} first.`, details: ranked.map((item) => ({ label: item.label, value: format(item.value, measure, mapping) })) };
 }

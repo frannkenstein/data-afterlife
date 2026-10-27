@@ -83,6 +83,17 @@ describe("deterministic analysis", () => {
     expect(executeGenericQuery(rows, columns, { intent: "group", groupColumn: "date", period: "month", measureColumn: "amount", operation: "sum", direction: "desc", limit: 2, filters: [] }, mapping).answer).toContain("2024-03: 2,000");
     expect(() => executeGenericQuery(rows, columns, { intent: "aggregate", operation: "sum", column: "fake", filters: [] }, mapping)).toThrow("outside this CSV");
   });
+  it("groups calendar years and quarters and rejects plans that discard the requested period", () => {
+    const csv = readFileSync(new URL("../public/examples/forgotten-cinema-ledger.csv", import.meta.url), "utf8");
+    const dataset = parseCsvText(csv, "forgotten-cinema-ledger.csv");
+    const plan = { intent: "group" as const, groupColumn: "date", period: "year" as const, measureColumn: "amount", operation: "sum" as const, direction: "desc" as const, limit: 1, filters: [] };
+    expect(verifyQuestionPlan("Which year has the highest amount?", plan, "amount", "date")).toEqual(plan);
+    expect(verifyQuestionPlan("What year recorded the most amount?", plan, "amount", "date")).toEqual(plan);
+    expect(executeGenericQuery(dataset.rows, dataset.columns, plan, mapping).answer).toContain("2000: 32,033");
+    expect(verifyQuestionPlan("Which year has the highest amount?", { intent: "aggregate", operation: "max", column: "amount", filters: [] }, "amount", "date").intent).toBe("unsupported");
+    expect(verifyQuestionPlan("Which year has the highest amount?", { ...plan, period: "month" }, "amount", "date").intent).toBe("unsupported");
+    expect(executeGenericQuery(dataset.rows, dataset.columns, { ...plan, period: "quarter" }, mapping).answer).toMatch(/\d{4}-Q\d:/);
+  });
   it("does not infer causes or forecasts from recorded rows", () => {
     expect(explicitQuestionPlan("Why did spending rise in May?")?.intent).toBe("unsupported");
     expect(explicitQuestionPlan("Forecast next month")?.intent).toBe("unsupported");
