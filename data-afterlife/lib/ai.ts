@@ -21,39 +21,57 @@ export const queryPlanSchema = z.discriminatedUnion("intent", [
   z.object({ intent: z.literal("extreme_month"), direction: z.enum(["highest", "lowest"]) }).strict(),
   z.object({ intent: z.literal("extreme_category"), direction: z.enum(["highest", "lowest"]) }).strict(),
   z.object({ intent: z.literal("change_month"), from: z.string().regex(/^\d{4}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}$/) }).strict(),
+  z.object({ intent: z.literal("aggregate"), operation: z.enum(["sum", "average", "median", "min", "max", "count", "distinct_count"]), column: z.string().max(100), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
+  z.object({ intent: z.literal("ranked_rows"), sortColumn: z.string().max(100), direction: z.enum(["asc", "desc"]), limit: z.number().int().min(1).max(100), operation: z.enum(["average", "sum", "min", "max", "list"]), measureColumn: z.string().max(100), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
+  z.object({ intent: z.literal("group"), groupColumn: z.string().max(100), period: z.enum(["none", "month"]), measureColumn: z.string().max(100), operation: z.enum(["sum", "average", "count"]), direction: z.enum(["asc", "desc"]), limit: z.number().int().min(1).max(20), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
   z.object({ intent: z.literal("unsupported"), reason: z.string().max(150) }).strict(),
 ]);
 export type QueryPlan = z.infer<typeof queryPlanSchema>;
 
 const unsupported = (reason: string): QueryPlan => ({ intent: "unsupported", reason });
 
-export function explicitQuestionPlan(question: string): QueryPlan | null {
+export function explicitQuestionPlan(question: string, measureColumn?: string): QueryPlan | null {
   const text = question.trim().toLowerCase();
-  if (/\b(average|mean)\b/.test(text) && /\b(lowest|highest|smallest|largest|top|bottom|first|last)\b/.test(text)) {
-    return unsupported("Only the overall average is supported; averages of selected rows or groups are not available yet.");
+  const qualified = /\b(for|where|among|only)\b/.test(text);
+  const rankedAverage = /\baverage\s+of\s+(?:the\s+)?(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s+(lowest|highest)\b/.exec(text);
+  if (rankedAverage && measureColumn && text.includes(measureColumn.toLowerCase())) {
+    const counts: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+    return { intent: "ranked_rows", sortColumn: measureColumn, direction: rankedAverage[2] === "lowest" ? "asc" : "desc", limit: counts[rankedAverage[1]] ?? Number(rankedAverage[1]), operation: "average", measureColumn, filters: [] };
   }
   if (/\b(second|2nd|runner[\s-]?up)\b/.test(text)) {
-    if (/\b(highest|largest|biggest)\b/.test(text) && /\bmonths?\b/.test(text)) return { intent: "second_highest_month" };
+    if (!qualified && /\b(highest|largest|biggest)\b/.test(text) && /\bmonths?\b/.test(text)) return { intent: "second_highest_month" };
     return unsupported("I can answer the second-highest month, but this wording is not clear enough.");
   }
+  if (!qualified && /\bmonths?\b/.test(text) && !/\b(average|mean|single|individual)\b/.test(text)) {
+    if (/\b(highest|largest|biggest)\b/.test(text)) return { intent: "extreme_month", direction: "highest" };
+    if (/\b(lowest|smallest)\b/.test(text)) return { intent: "extreme_month", direction: "lowest" };
+  }
   if (/\bhalf\b/.test(text)) {
-    if (/\bhalf\s+of\s+(?:the\s+)?total\b/.test(text) && !/\b(month|category|group|average|mean)\b/.test(text)) return { intent: "half_total" };
+    if (!qualified && /\bhalf\s+of\s+(?:the\s+)?total\b/.test(text) && !/\b(month|category|group|average|mean)\b/.test(text)) return { intent: "half_total" };
     return unsupported("I can calculate half of the overall total, but this wording is ambiguous.");
   }
-  if (/\b(double|twice|triple|percent(?:age)?|median|ratio|multiply|divid(?:e|ed)|quarter|third)\b/.test(text)) {
+  if (/\b(double|twice|triple|percent(?:age)?|ratio|multiply|divid(?:e|ed)|quarter)\b/.test(text)) {
     return unsupported("That calculation is not supported yet.");
   }
   return null;
 }
 
-export function verifyQuestionPlan(question: string, plan: QueryPlan): QueryPlan {
-  const explicit = explicitQuestionPlan(question);
+export function verifyQuestionPlan(question: string, plan: QueryPlan, measureColumn?: string): QueryPlan {
+  const explicit = explicitQuestionPlan(question, measureColumn);
   if (explicit) return explicit;
   const text = question.toLowerCase();
   if (plan.intent === "half_total") return unsupported("The question does not clearly ask for half of the overall total.");
   if (plan.intent === "second_highest_month") return unsupported("The question does not clearly ask for the second-highest month.");
-  if (plan.intent === "average" && !/\b(average|mean)\b/.test(text)) return unsupported("The question does not clearly ask for an average.");
+  if (plan.intent === "average" && (!/\b(average|mean)\b/.test(text) || /\b(lowest|highest|smallest|largest|top|bottom|first|last)\b/.test(text))) return unsupported("The question asks for more than the overall average.");
   if (plan.intent === "total" && !/\b(total|sum)\b/.test(text)) return unsupported("The question does not clearly ask for a total.");
+  if (plan.intent === "ranked_rows") {
+    if (/\b(lowest|smallest|bottom)\b/.test(text) && plan.direction !== "asc") return unsupported("The proposed ranking does not match the question.");
+    if (/\b(highest|largest|top)\b/.test(text) && plan.direction !== "desc") return unsupported("The proposed ranking does not match the question.");
+  }
+  if (plan.intent === "group" || plan.intent === "aggregate") {
+    if (/\b(average|mean)\b/.test(text) && plan.operation !== "average") return unsupported("The proposed calculation does not match the requested average.");
+    if (/\b(total|sum)\b/.test(text) && !/\b(average|mean)\b/.test(text) && plan.operation !== "sum") return unsupported("The proposed calculation does not match the requested total.");
+  }
   return plan;
 }
 
@@ -79,8 +97,11 @@ export function answerQuestion(plan: QueryPlan, result: Analysis, mapping: Mappi
     const chosen = [...groups].sort((a, b) => plan.direction === "highest" ? b.total - a.total : a.total - b.total)[0];
     return { answer: `${chosen.label}: ${number(chosen.total)}`, breakdown: `${plan.direction} total among ${groups.length} ${plan.intent === "extreme_month" ? "months" : "categories"}; ${chosen.count} contributing rows.` };
   }
-  const from = result.months.find((group) => group.label === plan.from);
-  const to = result.months.find((group) => group.label === plan.to);
-  if (!from || !to) return { answer: "Those months are not both available.", breakdown: `Available months: ${result.months.map((group) => group.label).join(", ") || "none"}.` };
-  return { answer: `${number(to.total - from.total)} change`, breakdown: `${plan.from}: ${number(from.total)} → ${plan.to}: ${number(to.total)}.` };
+  if (plan.intent === "change_month") {
+    const from = result.months.find((group) => group.label === plan.from);
+    const to = result.months.find((group) => group.label === plan.to);
+    if (!from || !to) return { answer: "Those months are not both available.", breakdown: `Available months: ${result.months.map((group) => group.label).join(", ") || "none"}.` };
+    return { answer: `${number(to.total - from.total)} change`, breakdown: `${plan.from}: ${number(from.total)} → ${plan.to}: ${number(to.total)}.` };
+  }
+  return { answer: "This question needs row-level analysis.", breakdown: "The browser is preparing a calculation from the selected CSV." };
 }

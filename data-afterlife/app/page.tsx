@@ -5,20 +5,8 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Too
 import { parseMonth, parseNumber, type Analysis, type Mapping } from "@/lib/analysis";
 import { AiInsights, AskDataAfterlife } from "@/components/ai-panel";
 import { MAX_BYTES, type Dataset } from "@/lib/csv";
+import { runCsvWorker } from "@/lib/worker-client";
 
-type WorkerRequest = { kind: "parse"; file: File } | { kind: "analyze"; rows: Record<string, string>[]; mapping: Mapping };
-function runWorker<T>(request: WorkerRequest): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL("../workers/csv-worker.ts", import.meta.url), { type: "module" });
-    worker.onmessage = (event: MessageEvent<{ ok: boolean; data?: T; error?: string }>) => {
-      worker.terminate();
-      if (event.data.ok && event.data.data !== undefined) resolve(event.data.data);
-      else reject(new Error(event.data.error ?? "Processing failed."));
-    };
-    worker.onerror = () => { worker.terminate(); reject(new Error("The CSV worker could not start. Try refreshing the page.")); };
-    worker.postMessage(request);
-  });
-}
 function inferredType(rows: Record<string, string>[], column: string): string {
   const values = rows.slice(0, 100).map((row) => (row[column] ?? "").trim()).filter(Boolean);
   if (!values.length) return "empty";
@@ -41,7 +29,7 @@ export default function Home() {
       if (!file.name.toLowerCase().endsWith(".csv")) throw new Error("Choose a .csv file.");
       if (file.size > MAX_BYTES) throw new Error("Choose a CSV smaller than 5 MB.");
       if (!file.size) throw new Error("This file is empty.");
-      const next = await runWorker<Dataset>({ kind: "parse", file });
+      const next = await runCsvWorker<Dataset>({ kind: "parse", file });
       setDataset(next);
       setMapping({ measure: next.columns.find((column) => /amount|total|price|value/i.test(column)) ?? "", date: next.columns.find((column) => /date|time/i.test(column)) ?? "", category: next.columns.find((column) => /category|type|group/i.test(column)) ?? "", dateFormat: "iso", unit: "", stripCurrency: false, groupSeparator: false });
       setAnalysis(null);
@@ -53,7 +41,7 @@ export default function Home() {
     setError(""); setAnalyzing(true); setAnalysis(null);
     try {
       const [result] = await Promise.all([
-        runWorker<Analysis>({ kind: "analyze", rows: dataset.rows, mapping }),
+        runCsvWorker<Analysis>({ kind: "analyze", rows: dataset.rows, mapping }),
         new Promise<void>((resolve) => setTimeout(resolve, 350)),
       ]);
       setAnalysis(result);
@@ -67,13 +55,13 @@ export default function Home() {
     {loading && <p className="mt-6 flex items-center gap-2" role="status"><span className="h-4 w-4 animate-spin rounded-full border-2 border-[#285640] border-t-transparent" aria-hidden="true" />Parsing CSV in a background worker…</p>}{analyzing && <p className="mt-6 flex items-center gap-2" role="status"><span className="h-4 w-4 animate-spin rounded-full border-2 border-[#285640] border-t-transparent" aria-hidden="true" />Analyzing rows in a background worker…</p>}{error && <p className="mt-6 rounded-lg bg-red-50 p-4 text-red-800" role="alert">{error}</p>}
     {dataset && <section className="mt-8 rounded-2xl border border-[#cbd2c7] bg-white p-6 shadow-sm sm:p-8"><div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm text-[#657168]">Dataset preview</p><h2 className="text-2xl font-semibold">{dataset.name}</h2></div><p className="font-medium">{dataset.rows.length.toLocaleString()} rows · {dataset.columns.length} columns</p></div>{dataset.warnings.length > 0 && <div className="mb-5 rounded-lg bg-amber-50 p-4 text-amber-900"><h3 className="font-semibold">Parse warnings</h3><ul className="mt-2 list-inside list-disc text-sm">{dataset.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}<div className="overflow-x-auto"><table className="w-full border-collapse text-left text-sm"><caption className="sr-only">First ten rows of {dataset.name}</caption><thead><tr>{dataset.columns.map((column) => <th className="border-b border-[#cbd2c7] px-3 py-3 font-semibold" key={column}>{column}<span className="ml-2 rounded-full bg-[#e8eee7] px-2 py-0.5 text-xs font-normal">{inferredType(dataset.rows, column)}</span></th>)}</tr></thead><tbody>{dataset.rows.slice(0, 10).map((row, index) => <tr key={index} className="odd:bg-[#f7f8f4]">{dataset.columns.map((column) => <td className="max-w-72 truncate border-b border-[#e5e9e2] px-3 py-3" key={column} title={row[column] ?? ""}>{row[column] || <span className="text-[#9aa79c]">—</span>}</td>)}</tr>)}</tbody></table></div></section>}
     {dataset && <section className="mt-8 rounded-2xl border border-[#cbd2c7] bg-white p-6 shadow-sm sm:p-8"><h2 className="text-2xl font-semibold">Map your columns</h2><p className="mt-2 text-sm text-[#657168]">Confirm the fields before calculating. Ambiguous dates require an explicit format.</p><div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{(["measure", "date", "category"] as const).map((field) => <label key={field} className="text-sm font-semibold capitalize">{field === "measure" ? "Numeric measure" : `${field} (optional)`}<select disabled={analyzing} className="mt-2 w-full rounded-lg border border-[#a8b9a9] bg-white p-3" value={mapping[field]} onChange={(event) => { setMapping({ ...mapping, [field]: event.target.value }); setAnalysis(null); }}><option value="">{field === "measure" ? "Select a number column" : "None"}</option>{dataset.columns.map((column) => <option key={column} value={column}>{column}</option>)}</select></label>)}<label className="text-sm font-semibold">Date format<select disabled={analyzing} className="mt-2 w-full rounded-lg border border-[#a8b9a9] bg-white p-3" value={mapping.dateFormat} onChange={(event) => { setMapping({ ...mapping, dateFormat: event.target.value as Mapping["dateFormat"] }); setAnalysis(null); }}><option value="iso">YYYY-MM-DD</option><option value="dmy">DD/MM/YYYY</option><option value="mdy">MM/DD/YYYY</option></select></label></div><div className="mt-4 flex flex-wrap gap-5 text-sm"><label>Unit label <input disabled={analyzing} className="ml-2 rounded border border-[#a8b9a9] px-2 py-1" maxLength={20} value={mapping.unit} onChange={(event) => setMapping({ ...mapping, unit: event.target.value })} placeholder="optional" /></label><label><input type="checkbox" disabled={analyzing} checked={mapping.stripCurrency} onChange={(event) => { setMapping({ ...mapping, stripCurrency: event.target.checked }); setAnalysis(null); }} /> Strip leading currency symbol</label><label><input type="checkbox" disabled={analyzing} checked={mapping.groupSeparator} onChange={(event) => { setMapping({ ...mapping, groupSeparator: event.target.checked }); setAnalysis(null); }} /> Remove comma group separators</label></div><button disabled={!mapping.measure || loading || analyzing} onClick={() => void analyzeData()} className="mt-6 rounded-lg bg-[#285640] px-5 py-3 font-semibold text-white disabled:opacity-50">{analyzing ? <span className="flex items-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" aria-hidden="true" />Analyzing…</span> : "Analyze data"}</button></section>}
-    {dataset && analysis && <Dashboard result={analysis} mapping={mapping} />}
+    {dataset && analysis && <Dashboard result={analysis} mapping={mapping} rows={dataset.rows} columns={dataset.columns} />}
   </div></main>;
 }
 
-function Dashboard({ result, mapping }: { result: Analysis; mapping: Mapping }) {
+function Dashboard({ result, mapping, rows, columns }: { result: Analysis; mapping: Mapping; rows: Record<string, string>[]; columns: string[] }) {
   const format = (value: number) => `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)}${mapping.unit ? ` ${mapping.unit}` : ""}`;
-  return <section className="mt-8 space-y-6"><AskDataAfterlife result={result} mapping={mapping} /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[["Total", format(result.sum)], ["Average", format(result.average)], ["Minimum", format(result.min)], ["Maximum", format(result.max)]].map(([label, value]) => <div className="rounded-xl border border-[#cbd2c7] bg-white p-5" key={label}><p className="text-sm text-[#657168]">{label}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>)}</div><p className="rounded-xl bg-[#e8eee7] p-4 text-sm">Calculated from {result.count} valid numeric rows. {result.missing} missing and {result.invalid} invalid numeric values excluded.{mapping.date ? ` ${result.invalidDates} rows with invalid or missing dates excluded from monthly totals.` : ""} {mapping.unit ? "" : "Units not specified."}</p><AiInsights result={result} mapping={mapping} /><div className="grid gap-6 lg:grid-cols-2"><ChartPanel title="Monthly trend" groups={result.months} kind="line" format={format} empty={mapping.date ? "No valid dates for the selected format." : "Select a date column to see a trend."} /><ChartPanel title="Category totals" groups={result.categories} kind="bar" format={format} empty={mapping.category ? "No category values available." : "Select a category column to compare groups."} /></div></section>;
+  return <section className="mt-8 space-y-6"><AskDataAfterlife result={result} mapping={mapping} rows={rows} columns={columns} /><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[["Total", format(result.sum)], ["Average", format(result.average)], ["Minimum", format(result.min)], ["Maximum", format(result.max)]].map(([label, value]) => <div className="rounded-xl border border-[#cbd2c7] bg-white p-5" key={label}><p className="text-sm text-[#657168]">{label}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>)}</div><p className="rounded-xl bg-[#e8eee7] p-4 text-sm">Calculated from {result.count} valid numeric rows. {result.missing} missing and {result.invalid} invalid numeric values excluded.{mapping.date ? ` ${result.invalidDates} rows with invalid or missing dates excluded from monthly totals.` : ""} {mapping.unit ? "" : "Units not specified."}</p><AiInsights result={result} mapping={mapping} /><div className="grid gap-6 lg:grid-cols-2"><ChartPanel title="Monthly trend" groups={result.months} kind="line" format={format} empty={mapping.date ? "No valid dates for the selected format." : "Select a date column to see a trend."} /><ChartPanel title="Category totals" groups={result.categories} kind="bar" format={format} empty={mapping.category ? "No category values available." : "Select a category column to compare groups."} /></div></section>;
 }
 
 function ChartPanel({ title, groups, kind, format, empty }: { title: string; groups: { label: string; total: number }[]; kind: "line" | "bar"; format: (value: number) => string; empty: string }) {

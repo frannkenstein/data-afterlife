@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { analyze, parseMonth, parseNumber, type Mapping } from "./analysis";
 import { answerQuestion, explicitQuestionPlan, queryPlanSchema, verifyQuestionPlan } from "./ai";
 import { parseCsvText } from "./csv";
+import { executeGenericQuery } from "./query";
 
 const mapping: Mapping = { measure: "amount", date: "date", category: "category", dateFormat: "iso", unit: "", stripCurrency: false, groupSeparator: false };
 const rows = [
@@ -46,6 +47,7 @@ describe("deterministic analysis", () => {
     expect(answerQuestion({ intent: "half_total" }, result, mapping).answer).toContain("118,232.8");
     expect(answerQuestion({ intent: "extreme_month", direction: "highest" }, result, mapping).answer).toContain("2023-05: 15,803.54");
     expect(answerQuestion({ intent: "second_highest_month" }, result, mapping).answer).toContain("2023-07: 15,779.98");
+    expect(executeGenericQuery(dataset.rows, dataset.columns, { intent: "ranked_rows", sortColumn: "amount", direction: "asc", limit: 3, operation: "average", measureColumn: "amount", filters: [] }, mapping).answer).toContain("18.32");
   });
   it("distinguishes highest and second-highest months", () => {
     const result = analyze(rows, mapping);
@@ -56,6 +58,8 @@ describe("deterministic analysis", () => {
     expect(answerQuestion({ intent: "extreme_month", direction: "highest" }, result, mapping).answer).toContain("2024-03: 2,000");
     expect(answerQuestion(plan!, result, mapping).answer).toContain("2024-02: 1,000");
     expect(explicitQuestionPlan("Which category had the second highest amount?")?.intent).toBe("unsupported");
+    expect(explicitQuestionPlan("Which month had the highest amount?")).toEqual({ intent: "extreme_month", direction: "highest" });
+    expect(explicitQuestionPlan("Which month had the highest amount for Food?")).toBeNull();
   });
   it("handles tied and unavailable second-highest totals", () => {
     const tied = analyze([{ date: "2024-01-01", category: "A", amount: "20" }, { date: "2024-02-01", category: "A", amount: "10" }, { date: "2024-03-01", category: "A", amount: "10" }], mapping);
@@ -63,9 +67,19 @@ describe("deterministic analysis", () => {
     const oneMonth = analyze([{ date: "2024-01-01", category: "A", amount: "20" }], mapping);
     expect(answerQuestion({ intent: "second_highest_month" }, oneMonth, mapping).answer).toBe("No second-highest month is available.");
   });
-  it("rejects averages over selected lowest values", () => {
+  it("computes averages over selected lowest values", () => {
     const question = "What is the average of the three lowest amounts?";
-    expect(explicitQuestionPlan(question)?.intent).toBe("unsupported");
+    const plan = explicitQuestionPlan(question, "amount");
+    expect(plan).toMatchObject({ intent: "ranked_rows", direction: "asc", limit: 3, operation: "average" });
     expect(verifyQuestionPlan(question, { intent: "average" }).intent).toBe("unsupported");
+    if (!plan || plan.intent !== "ranked_rows") throw new Error("Expected ranked plan");
+    expect(executeGenericQuery(rows, ["date", "category", "amount"], plan, mapping).answer).toContain("300");
+  });
+  it("supports filtered, grouped, and median questions from row data", () => {
+    const columns = ["date", "category", "amount"];
+    expect(executeGenericQuery(rows, columns, { intent: "aggregate", operation: "median", column: "amount", filters: [] }, mapping).answer).toContain("625");
+    expect(executeGenericQuery(rows, columns, { intent: "aggregate", operation: "sum", column: "amount", filters: [{ column: "category", operator: "eq", value: "Food" }] }, mapping).answer).toContain("2,150");
+    expect(executeGenericQuery(rows, columns, { intent: "group", groupColumn: "date", period: "month", measureColumn: "amount", operation: "sum", direction: "desc", limit: 2, filters: [] }, mapping).answer).toContain("2024-03: 2,000");
+    expect(() => executeGenericQuery(rows, columns, { intent: "aggregate", operation: "sum", column: "fake", filters: [] }, mapping)).toThrow("outside this CSV");
   });
 });
