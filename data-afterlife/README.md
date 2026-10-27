@@ -42,4 +42,4 @@ Ask DataAfterlife accepts open-ended questions about columns in the CSV. Gemma t
 4. Ask “Which month had the highest amount?” or “What is the average of the three lowest amount values?”
 5. Switch the monthly chart to Area and the category chart to Pie, then save the report as PDF.
 
-See [the Week 4 submission draft](docs/hacktoberfest-week4-submission.md) for a write-up and a short recording script. Replace its repository and demo placeholders before publishing.
+See [the Week 4 submission draft](docs/hacktoberfest-week4-submission.md) for a write-up, [demo screenshot](docs/assets/cinema-story.jpg), and a short recording script. Replace its repository and video placeholders before publishing.

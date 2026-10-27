@@ -1,6 +1,6 @@
 # DataAfterlife: the ghost in a forgotten CSV
 
-> Draft for the [Hacktoberfest 2026 Week 4 challenge](https://dev.to/challenges/hacktoberfest-week4-2026-10-26). Add a public repository URL, screenshots or a short video, and a verified demo link before publishing. The app runs locally with Ollama; a static hosted front end alone cannot reach a visitor's local model through its current API routes.
+> Draft for the [Hacktoberfest 2026 Week 4 challenge](https://dev.to/challenges/hacktoberfest-week4-2026-10-26). Add a public repository URL and a short video or verified demo link before publishing. A screenshot is included below. The app runs locally with Ollama; a static hosted front end alone cannot reach a visitor's local model through its current API routes.
 
 ## The moment I wanted to recover
 
@@ -17,7 +17,9 @@ That is my interpretation of Week 4's *Ghost in the Machine*: give dormant recor
 3. You can ask a question in natural language. Gemma proposes a constrained query plan; the browser validates and executes the calculation against the rows. The model never receives the raw CSV rows and cannot run arbitrary code.
 4. Canvas charts switch between line, bar, area, and pie views. The summary, story, charts, and tables can be saved through the browser's PDF print flow.
 
-**Try it:** [PUBLIC_REPOSITORY_URL] · [DEMO_VIDEO_OR_SCREENSHOTS]
+**Try it:** [PUBLIC_REPOSITORY_URL] · [DEMO_VIDEO_URL]
+
+![Cinema archive summary and evidence-backed story](assets/cinema-story.jpg)
 
 ## Why open AI matters here
 
