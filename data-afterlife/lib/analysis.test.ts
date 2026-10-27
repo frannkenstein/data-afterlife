@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { analyze, parseMonth, parseNumber, type Mapping } from "./analysis";
-import { answerQuestion, explicitQuestionPlan, makePacket, queryPlanSchema, verifyQuestionPlan } from "./ai";
+import { alignTimeGrouping, answerQuestion, explicitQuestionPlan, makePacket, queryPlanSchema, verifyQuestionPlan } from "./ai";
 import { parseCsvText } from "./csv";
 import { executeGenericQuery } from "./query";
 import { describeFact, evidenceTarget } from "./story";
@@ -90,6 +90,10 @@ describe("deterministic analysis", () => {
     expect(verifyQuestionPlan("Which year has the highest amount?", plan, "amount", "date")).toEqual(plan);
     expect(verifyQuestionPlan("What year recorded the most amount?", plan, "amount", "date")).toEqual(plan);
     expect(executeGenericQuery(dataset.rows, dataset.columns, plan, mapping).answer).toContain("2000: 32,033");
+    const mistaken = { intent: "aggregate" as const, operation: "max" as const, column: "amount", filters: [] };
+    expect(alignTimeGrouping("Which year has the highest amount?", mistaken, "amount", "date")).toEqual(plan);
+    expect(alignTimeGrouping("Which quarter had the lowest average amount?", mistaken, "amount", "date")).toMatchObject({ intent: "group", period: "quarter", operation: "average", direction: "asc" });
+    expect(alignTimeGrouping("What is the highest individual amount?", mistaken, "amount", "date")).toEqual(mistaken);
     expect(verifyQuestionPlan("Which year has the highest amount?", { intent: "aggregate", operation: "max", column: "amount", filters: [] }, "amount", "date").intent).toBe("unsupported");
     expect(verifyQuestionPlan("Which year has the highest amount?", { ...plan, period: "month" }, "amount", "date").intent).toBe("unsupported");
     expect(executeGenericQuery(dataset.rows, dataset.columns, { ...plan, period: "quarter" }, mapping).answer).toMatch(/\d{4}-Q\d:/);

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { explicitQuestionPlan, queryPlanSchema, verifyQuestionPlan } from "@/lib/ai";
+import { alignTimeGrouping, explicitQuestionPlan, queryPlanSchema, verifyQuestionPlan } from "@/lib/ai";
 import { ollamaJson } from "@/lib/ollama";
 import { readLimitedJson } from "@/lib/request";
 
@@ -17,10 +17,10 @@ export async function POST(request: Request) {
     const schema = z.toJSONSchema(queryPlanSchema);
     const prompt = `Translate the question into one JSON analysis plan. Exact CSV columns: ${JSON.stringify(input.columns)}. Selected numeric measure: ${JSON.stringify(input.measureColumn)}. Selected date column: ${JSON.stringify(input.dateColumn)}. Date mapped: ${input.hasDate}; category mapped: ${input.hasCategory}. Use aggregate for whole-column statistics, optionally with filters. Use ranked_rows when a question selects N lowest or highest row values and then asks for their average, sum, or list. Use group for category or time breakdowns. For a mapped date, period can be year, quarter, or month; use the exact selected date column as groupColumn. For "which year has the highest amount", group by year, sum the measure, sort desc, limit 1. For "which quarter had the lowest average amount", group by quarter, average the measure, sort asc, limit 1. A question about highest/lowest month of amount means monthly SUM unless it explicitly says average. For all generic plans include filters: [] when none. Example "average of three lowest amounts" -> ranked_rows, sortColumn amount, direction asc, limit 3, operation average, measureColumn amount, filters []. Never turn a subset question into an overall average. If the data cannot establish an answer, return unsupported. Do not invent columns, values, or code. Question: ${JSON.stringify(input.question)}`;
     const candidate = queryPlanSchema.parse(await ollamaJson(prompt, schema));
-    let plan = verifyQuestionPlan(input.question, candidate, input.measureColumn, input.dateColumn);
+    let plan = verifyQuestionPlan(input.question, alignTimeGrouping(input.question, candidate, input.measureColumn, input.dateColumn), input.measureColumn, input.dateColumn);
     if (candidate.intent !== "unsupported" && plan.intent === "unsupported") {
       const revised = queryPlanSchema.parse(await ollamaJson(`${prompt}\nYour first plan was ${JSON.stringify(candidate)}. It failed validation: ${plan.reason} Revise the plan to answer the exact question; return unsupported only if the requested calculation is impossible from these columns.`, schema));
-      plan = verifyQuestionPlan(input.question, revised, input.measureColumn, input.dateColumn);
+      plan = verifyQuestionPlan(input.question, alignTimeGrouping(input.question, revised, input.measureColumn, input.dateColumn), input.measureColumn, input.dateColumn);
     }
     if (plan.intent === "aggregate" || plan.intent === "ranked_rows" || plan.intent === "group") {
       const references = [...plan.filters.map((filter) => filter.column)];

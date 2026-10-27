@@ -38,12 +38,22 @@ export const queryPlanSchema = z.discriminatedUnion("intent", [
   z.object({ intent: z.literal("change_month"), from: z.string().regex(/^\d{4}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}$/) }).strict(),
   z.object({ intent: z.literal("aggregate"), operation: z.enum(["sum", "average", "median", "min", "max", "count", "distinct_count"]), column: z.string().max(100), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
   z.object({ intent: z.literal("ranked_rows"), sortColumn: z.string().max(100), direction: z.enum(["asc", "desc"]), limit: z.number().int().min(1).max(100), operation: z.enum(["average", "sum", "min", "max", "list"]), measureColumn: z.string().max(100), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
-  z.object({ intent: z.literal("group"), groupColumn: z.string().max(100), period: z.enum(["none", "year", "quarter", "month"]), measureColumn: z.string().max(100), operation: z.enum(["sum", "average", "count"]), direction: z.enum(["asc", "desc"]), limit: z.number().int().min(1).max(20), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
+  z.object({ intent: z.literal("group"), groupColumn: z.string().max(100), period: z.enum(["none", "year", "quarter", "month"]), measureColumn: z.string().max(100), operation: z.enum(["sum", "average", "median", "min", "max", "count"]), direction: z.enum(["asc", "desc"]), limit: z.number().int().min(1).max(20), filters: z.array(z.object({ column: z.string().max(100), operator: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "contains"]), value: z.string().max(100) }).strict()).max(3) }).strict(),
   z.object({ intent: z.literal("unsupported"), reason: z.string().max(150) }).strict(),
 ]);
 export type QueryPlan = z.infer<typeof queryPlanSchema>;
 
 const unsupported = (reason: string): QueryPlan => ({ intent: "unsupported", reason });
+
+export function alignTimeGrouping(question: string, plan: QueryPlan, measureColumn: string, dateColumn: string): QueryPlan {
+  if (!dateColumn || !measureColumn || (plan.intent !== "aggregate" && plan.intent !== "group")) return plan;
+  const text = question.toLowerCase();
+  const period = /\b(year|years|yearly|annual|annually)\b/.test(text) ? "year" : /\b(quarter|quarters|quarterly)\b/.test(text) ? "quarter" : /\b(month|months|monthly)\b/.test(text) ? "month" : null;
+  const direction = /\b(highest|largest|biggest|most|top)\b/.test(text) ? "desc" : /\b(lowest|smallest|least|bottom)\b/.test(text) ? "asc" : null;
+  if (!period || !direction || (plan.intent === "aggregate" && plan.column !== measureColumn)) return plan;
+  const operation = /\b(average|mean)\b/.test(text) ? "average" : /\bmedian\b/.test(text) ? "median" : /\b(count|number of|how many)\b/.test(text) ? "count" : /\b(individual|single|maximum|minimum)\b/.test(text) ? (direction === "desc" ? "max" : "min") : "sum";
+  return { intent: "group", groupColumn: dateColumn, period, measureColumn, operation, direction, limit: 1, filters: plan.filters };
+}
 
 export function explicitQuestionPlan(question: string, measureColumn?: string): QueryPlan | null {
   const text = question.trim().toLowerCase();
@@ -77,7 +87,7 @@ export function verifyQuestionPlan(question: string, plan: QueryPlan, measureCol
   const explicit = explicitQuestionPlan(question, measureColumn);
   if (explicit) return explicit;
   const text = question.toLowerCase();
-  const requestedPeriod = /\b(year|yearly|annual|annually|per year)\b/.test(text) ? "year" : /\b(quarter|quarterly|per quarter)\b/.test(text) ? "quarter" : /\b(month|monthly|per month)\b/.test(text) ? "month" : null;
+  const requestedPeriod = /\b(year|years|yearly|annual|annually|per year)\b/.test(text) ? "year" : /\b(quarter|quarters|quarterly|per quarter)\b/.test(text) ? "quarter" : /\b(month|months|monthly|per month)\b/.test(text) ? "month" : null;
   if (requestedPeriod && (plan.intent !== "group" || plan.period !== requestedPeriod || plan.groupColumn !== dateColumn)) return unsupported(`The proposed calculation does not group by ${requestedPeriod}.`);
   if (plan.intent === "group" && plan.period !== "none" && !requestedPeriod && !/\b(date|time|period)\b/.test(text)) return unsupported("The proposed time grouping is not requested by the question.");
   if (plan.intent === "half_total") return unsupported("The question does not clearly ask for half of the overall total.");
