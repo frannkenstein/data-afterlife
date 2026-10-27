@@ -31,7 +31,7 @@ export default function Home() {
       resultsRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
     }
   }, [analysis]);
-  async function load(file: File) {
+  async function load(file: File, analyzeImmediately = false) {
     setError(""); setLoading(true);
     try {
       if (!file.name.toLowerCase().endsWith(".csv")) throw new Error("Choose a .csv file.");
@@ -39,10 +39,16 @@ export default function Home() {
       if (!file.size) throw new Error("This file is empty.");
       const next = await runCsvWorker<Dataset>({ kind: "parse", file });
       setDataset(next);
-      setMapping({ measure: next.columns.find((column) => /amount|total|price|value/i.test(column)) ?? "", date: next.columns.find((column) => /date|time/i.test(column)) ?? "", category: next.columns.find((column) => /category|type|group/i.test(column)) ?? "", dateFormat: "iso", unit: "", stripCurrency: false, groupSeparator: false });
+      const nextMapping: Mapping = { measure: next.columns.find((column) => /amount|total|price|value/i.test(column)) ?? "", date: next.columns.find((column) => /date|time/i.test(column)) ?? "", category: next.columns.find((column) => /category|type|group/i.test(column)) ?? "", dateFormat: "iso", unit: "", stripCurrency: false, groupSeparator: false };
+      setMapping(nextMapping);
       setAnalysis(null);
+      if (analyzeImmediately && nextMapping.measure) {
+        setLoading(false);
+        setAnalyzing(true);
+        setAnalysis(await runCsvWorker<Analysis>({ kind: "analyze", rows: next.rows, mapping: nextMapping }));
+      }
     } catch (cause) { setDataset(null); setAnalysis(null); setError(cause instanceof Error ? cause.message : "Could not read this CSV."); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setAnalyzing(false); }
   }
   async function analyzeData() {
     if (!dataset || !mapping.measure || analyzing) return;
@@ -69,7 +75,7 @@ export default function Home() {
     >
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div><h2 className="text-xl font-semibold">Open a CSV</h2><p className="mt-1 text-sm text-[#657168]">Drag and drop a CSV here, or choose a file.</p><p className="mt-1 text-sm text-[#657168]">UTF-8 · up to 5 MB · 10,000 rows · 50 columns</p></div>
-        <div className="flex flex-wrap gap-3"><label className="cursor-pointer rounded-lg bg-[#285640] px-5 py-3 font-semibold text-white hover:bg-[#19422f]">Choose CSV<input className="sr-only" type="file" disabled={loading || analyzing} accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void load(file); event.target.value = ""; }} /></label><button disabled={loading || analyzing} className="rounded-lg border border-[#9dae9f] px-5 py-3 font-semibold hover:bg-[#eef3ec] disabled:opacity-50" onClick={async () => { const response = await fetch("/examples/sample-expenses.csv"); void load(new File([await response.blob()], "sample-expenses.csv", { type: "text/csv" })); }}>Try synthetic sample</button></div>
+        <div className="flex flex-wrap gap-3"><label className="cursor-pointer rounded-lg bg-[#285640] px-5 py-3 font-semibold text-white hover:bg-[#19422f]">Choose CSV<input className="sr-only" type="file" disabled={loading || analyzing} accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void load(file); event.target.value = ""; }} /></label><button disabled={loading || analyzing} className="rounded-lg border border-[#9dae9f] px-5 py-3 font-semibold hover:bg-[#eef3ec] disabled:opacity-50" onClick={async () => { const response = await fetch("/examples/forgotten-cinema-ledger.csv"); if (!response.ok) { setError("Could not open the demo archive."); return; } void load(new File([await response.blob()], "forgotten-cinema-ledger.csv", { type: "text/csv" }), true); }}>Explore the cinema archive</button></div>
       </div>
       <p className="mt-5 text-sm text-[#657168]">Your file is parsed in your browser. Nothing is uploaded when you preview it. Data is cleared on reload.</p>
     </section>
