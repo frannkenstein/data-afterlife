@@ -20,6 +20,9 @@ export function CanvasChart({ title, chartType, groups, format }: { title: strin
     const isPie = chartType === "pie";
     const isArea = chartType === "area";
     const isCategoryBar = title === "Category totals" && chartType === "bar";
+    const values = groups.map((group) => group.total);
+    const highIndex = values.indexOf(Math.max(...values));
+    const lowIndex = values.indexOf(Math.min(...values));
     const gradient = canvas.getContext("2d")?.createLinearGradient(0, 0, 0, 280);
     if (gradient) {
       gradient.addColorStop(0, "rgba(86, 128, 106, 0.48)");
@@ -32,7 +35,7 @@ export function CanvasChart({ title, chartType, groups, format }: { title: strin
         labels: groups.map((group) => group.label),
         datasets: [{
           label: "Total",
-          data: groups.map((group) => group.total),
+          data: values,
           borderColor: isPie ? "#fff" : "#285640",
           backgroundColor: isPie ? sliceColors : isArea ? gradient ?? "#a9c5b2" : chartType === "line" ? "#285640" : "#56806a",
           borderWidth: isPie ? 3 : chartType === "bar" ? 0 : 3,
@@ -40,9 +43,9 @@ export function CanvasChart({ title, chartType, groups, format }: { title: strin
           maxBarThickness: 38,
           fill: isArea ? "origin" : false,
           tension: 0.35,
-          pointRadius: groups.length > 20 ? 0 : 3,
+          pointRadius: values.map((_, index) => index === highIndex || index === lowIndex ? 6 : groups.length > 20 ? 0 : 3),
           pointHoverRadius: 6,
-          pointBackgroundColor: "#fff",
+          pointBackgroundColor: values.map((_, index) => index === highIndex ? "#d4ad79" : index === lowIndex ? "#8b9db1" : "#fff"),
           pointBorderColor: "#285640",
           pointBorderWidth: 2,
           hoverOffset: isPie ? 8 : undefined,
@@ -82,7 +85,15 @@ export function CanvasChart({ title, chartType, groups, format }: { title: strin
     };
 
     const chart = new Chart(canvas, config);
-    return () => chart.destroy();
+    const beforePrint = () => chart.resize(560, 280);
+    const afterPrint = () => chart.resize();
+    window.addEventListener("beforeprint", beforePrint);
+    window.addEventListener("afterprint", afterPrint);
+    return () => {
+      window.removeEventListener("beforeprint", beforePrint);
+      window.removeEventListener("afterprint", afterPrint);
+      chart.destroy();
+    };
   }, [title, chartType, groups, format]);
 
   return <div className="relative mt-5 h-72 w-full min-w-0"><canvas ref={canvasRef} role="img" aria-label={`${title} ${chartType} chart`} /></div>;

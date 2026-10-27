@@ -100,4 +100,11 @@ describe("deterministic analysis", () => {
     expect(describeFact(rise)).toContain("up");
     expect(evidenceTarget(rise)).toBe("#monthly-trend");
   });
+  it("does not describe a gap in records as a monthly change", () => {
+    const sparse = analyze([
+      { date: "2024-01-01", category: "A", amount: "10" },
+      { date: "2024-03-01", category: "A", amount: "50" },
+    ], mapping);
+    expect(makePacket(sparse).facts.some((fact) => fact.id === "F8" || fact.id === "F9")).toBe(false);
+  });
 });

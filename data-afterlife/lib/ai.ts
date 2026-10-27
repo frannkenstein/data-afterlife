@@ -12,7 +12,11 @@ export function makePacket(result: Analysis): z.infer<typeof packetSchema> {
   if (topMonth) facts.push({ id: "F5", label: `Highest month ${topMonth.label}`, value: topMonth.total });
   if (topCategory) facts.push({ id: "F6", label: `Highest category ${topCategory.label.slice(0, 40)}`, value: topCategory.total });
   if (lowMonth && lowMonth.label !== topMonth?.label) facts.push({ id: "F7", label: `Lowest month ${lowMonth.label}`, value: lowMonth.total });
-  const changes = result.months.slice(1).map((month, index) => ({ from: result.months[index], to: month, change: month.total - result.months[index].total }));
+  const changes = result.months.slice(1).map((month, index) => ({ from: result.months[index], to: month, change: month.total - result.months[index].total })).filter(({ from, to }) => {
+    const [fromYear, fromMonth] = from.label.split("-").map(Number);
+    const [toYear, toMonth] = to.label.split("-").map(Number);
+    return toYear * 12 + toMonth - (fromYear * 12 + fromMonth) === 1;
+  });
   const rise = [...changes].sort((a, b) => b.change - a.change)[0];
   const fall = [...changes].sort((a, b) => a.change - b.change)[0];
   if (rise && rise.change > 0) facts.push({ id: "F8", label: `Largest monthly rise ${rise.from.label} to ${rise.to.label}`, value: rise.change });

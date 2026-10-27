@@ -26,3 +26,29 @@ summary {
 button:disabled {
   cursor: not-allowed;
 }
+
+@media print {
+  body, main {
+    background: #fff !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  canvas {
+    max-width: 100% !important;
+  }
+
+  .report-charts {
+    grid-template-columns: 1fr !important;
+  }
+
+  #monthly-trend, #category-totals, #insights-heading {
+    break-inside: avoid;
+  }
+}

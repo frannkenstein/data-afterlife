@@ -8,9 +8,11 @@ const insightSchema = z.object({ evidenceIds: z.array(z.string()).min(1).max(4) 
 export async function POST(request: Request) {
   try {
     const packet = packetSchema.parse(await readLimitedJson(request, 8_000));
-    const candidate = insightSchema.parse(await ollamaJson(`You are curating a brief story from a forgotten data archive. Select up to four distinct fact IDs in an order that tells the most interesting truthful arc. Prefer a low point, a month-to-month change, and a high point when available. Do not infer causes. Return only IDs from this packet: ${JSON.stringify(packet)}`, z.toJSONSchema(insightSchema)));
+    const candidate = insightSchema.parse(await ollamaJson(`You are curating a brief story from a forgotten data archive. Select up to four distinct fact IDs. If present, include F7 (lowest month), F8 (largest monthly rise), and F5 (highest month) in that order; choose a fourth fact that adds context. Do not infer causes. Return only IDs from this packet: ${JSON.stringify(packet)}`, z.toJSONSchema(insightSchema)));
     const known = new Set(packet.facts.map((fact) => fact.id));
-    const insights = [...new Set(candidate.evidenceIds)].filter((id) => known.has(id)).map((id) => {
+    const required = ["F7", "F8", "F5"].filter((id) => known.has(id));
+    const selected = [...new Set([...required, ...candidate.evidenceIds.filter((id) => known.has(id))])].slice(0, 4);
+    const insights = selected.map((id) => {
       const fact = packet.facts.find((item) => item.id === id)!;
       return { text: describeFact(fact), evidenceIds: [id] };
     });
