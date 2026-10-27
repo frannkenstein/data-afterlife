@@ -26,7 +26,7 @@ npm run build
 
 ## Data boundaries and limits
 
-CSV bytes and rows stay in browser memory and disappear on reload. The two local API routes receive only selected aggregate facts or a question plus mapping availability. Fact packets may include category labels; questions and labels can contain sensitive information, so preview the packet and use the AI controls only when comfortable sending them to your local Ollama service. A hosted deployment has different privacy properties and cannot use a visitor's local Ollama through these server routes.
+CSV bytes and rows stay in browser memory and disappear on reload. Parsing and aggregation run in a browser Web Worker so they do not block the interface. The two local API routes receive only selected aggregate facts or a question plus mapping availability. Fact packets may include category labels; questions and labels can contain sensitive information, so preview the packet and use the AI controls only when comfortable sending them to your local Ollama service. A hosted deployment has different privacy properties and cannot use a visitor's local Ollama through these server routes.
 
 Input is limited to one UTF-8 CSV under 5 MB, 10,000 rows, and 50 columns. Numeric parsing does not infer currencies or grouping separators; enable those options explicitly. Dates default to ISO `YYYY-MM-DD`; choose `DD/MM/YYYY` or `MM/DD/YYYY` explicitly for slash dates. Missing and invalid numeric values are excluded and counted. Invalid dates are excluded from monthly groups but still count toward overall numeric statistics. Data quality in the source remains the user's responsibility.
 
