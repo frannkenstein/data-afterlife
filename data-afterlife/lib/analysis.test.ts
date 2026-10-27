@@ -82,4 +82,8 @@ describe("deterministic analysis", () => {
     expect(executeGenericQuery(rows, columns, { intent: "group", groupColumn: "date", period: "month", measureColumn: "amount", operation: "sum", direction: "desc", limit: 2, filters: [] }, mapping).answer).toContain("2024-03: 2,000");
     expect(() => executeGenericQuery(rows, columns, { intent: "aggregate", operation: "sum", column: "fake", filters: [] }, mapping)).toThrow("outside this CSV");
   });
+  it("does not infer causes or forecasts from recorded rows", () => {
+    expect(explicitQuestionPlan("Why did spending rise in May?")?.intent).toBe("unsupported");
+    expect(explicitQuestionPlan("Forecast next month")?.intent).toBe("unsupported");
+  });
 });

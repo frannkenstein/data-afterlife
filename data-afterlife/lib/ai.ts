@@ -32,6 +32,8 @@ const unsupported = (reason: string): QueryPlan => ({ intent: "unsupported", rea
 
 export function explicitQuestionPlan(question: string, measureColumn?: string): QueryPlan | null {
   const text = question.trim().toLowerCase();
+  if (/^why\b|\b(cause|caused|reason for)\b/.test(text)) return unsupported("The CSV can show what changed, but it cannot establish why it happened.");
+  if (/\b(predict|forecast|next month|next year)\b/.test(text)) return unsupported("This app analyzes recorded rows and does not forecast future values.");
   const qualified = /\b(for|where|among|only)\b/.test(text);
   const rankedAverage = /\baverage\s+of\s+(?:the\s+)?(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s+(lowest|highest)\b/.exec(text);
   if (rankedAverage && measureColumn && text.includes(measureColumn.toLowerCase())) {
