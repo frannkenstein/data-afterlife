@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { parseMonth, parseNumber, type Analysis, type Mapping } from "@/lib/analysis";
 import { AiInsights, AskDataAfterlife } from "@/components/ai-panel";
+import { CanvasChart } from "@/components/canvas-chart";
 import { MAX_BYTES, type Dataset } from "@/lib/csv";
 import { runCsvWorker } from "@/lib/worker-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -104,14 +104,7 @@ function ChartPanel({ title, groups, kind, format, empty }: { title: string; gro
       </div>
     </div>
     {groups.length ? <>
-      <div className="mt-5 h-64" role="img" aria-label={`${title} ${chartType} chart`}>
-        <ResponsiveContainer width="100%" height="100%">
-          {chartType === "line" ? <LineChart data={chartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis /><Tooltip formatter={(value) => format(Number(value))} /><Line dataKey="total" stroke="#285640" strokeWidth={3} /></LineChart>
-            : chartType === "area" ? <AreaChart data={chartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis /><Tooltip formatter={(value) => format(Number(value))} /><Area dataKey="total" stroke="#285640" fill="#a9c5b2" /></AreaChart>
-              : chartType === "pie" ? <PieChart><Tooltip formatter={(value) => format(Number(value))} /><Pie data={chartData} dataKey="total" nameKey="label" outerRadius={90} label>{chartData.map((group, index) => <Cell key={group.label} fill={["#285640", "#56806a", "#8aac94", "#b7cda8", "#d4ad79", "#8b9db1"][index % 6]} />)}</Pie></PieChart>
-                : <BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" /><YAxis /><Tooltip formatter={(value) => format(Number(value))} /><Bar dataKey="total" fill="#56806a" /></BarChart>}
-        </ResponsiveContainer>
-      </div>
+      <CanvasChart title={title} chartType={chartType} groups={chartData} format={format} />
       <table className="mt-4 w-full text-sm"><thead><tr><th className="py-2 text-left">{kind === "line" ? "Month" : "Category"}</th><th className="py-2 text-right">Total</th></tr></thead><tbody>{groups.slice(0, 10).map((group) => <tr key={group.label} className="border-t border-[#e5e9e2]"><td className="py-2">{group.label}</td><td className="py-2 text-right">{format(group.total)}</td></tr>)}</tbody></table>
     </> : <p className="mt-5 text-[#657168]">{empty}</p>}
   </div>;
