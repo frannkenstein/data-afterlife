@@ -46,6 +46,7 @@ export function AskDataAfterlife({ result, mapping, rows, columns }: AskProps) {
     `What is the average of the three lowest ${mapping.measure} values?`,
     ...(mapping.date ? [`Which month had the highest ${mapping.measure}?`] : []),
     ...(mapping.date ? [`Which month had the second highest ${mapping.measure}?`] : []),
+    ...(mapping.date ? [`Which year had the highest total ${mapping.measure}?`] : []),
     ...(mapping.category ? [`Which ${mapping.category} had the highest total ${mapping.measure}?`] : []),
   ];
 
