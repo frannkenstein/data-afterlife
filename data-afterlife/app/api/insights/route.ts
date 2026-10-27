@@ -2,16 +2,17 @@ import { z } from "zod";
 import { packetSchema } from "@/lib/ai";
 import { ollamaJson } from "@/lib/ollama";
 import { readLimitedJson } from "@/lib/request";
+import { describeFact } from "@/lib/story";
 
 const insightSchema = z.object({ evidenceIds: z.array(z.string()).min(1).max(4) }).strict();
 export async function POST(request: Request) {
   try {
     const packet = packetSchema.parse(await readLimitedJson(request, 8_000));
-    const candidate = insightSchema.parse(await ollamaJson(`Select up to four distinct fact IDs most useful for explaining this dataset. Prefer highest month and leading category when present. Return only IDs from this packet: ${JSON.stringify(packet)}`, z.toJSONSchema(insightSchema)));
+    const candidate = insightSchema.parse(await ollamaJson(`You are curating a brief story from a forgotten data archive. Select up to four distinct fact IDs in an order that tells the most interesting truthful arc. Prefer a low point, a month-to-month change, and a high point when available. Do not infer causes. Return only IDs from this packet: ${JSON.stringify(packet)}`, z.toJSONSchema(insightSchema)));
     const known = new Set(packet.facts.map((fact) => fact.id));
     const insights = [...new Set(candidate.evidenceIds)].filter((id) => known.has(id)).map((id) => {
       const fact = packet.facts.find((item) => item.id === id)!;
-      return { text: fact.label.startsWith("Highest month") ? "This month has the highest recorded monthly total." : fact.label.startsWith("Highest category") ? "This category has the highest recorded category total." : `${fact.label} is calculated from the valid numeric rows.`, evidenceIds: [id] };
+      return { text: describeFact(fact), evidenceIds: [id] };
     });
     return Response.json({ insights });
   } catch (error) {

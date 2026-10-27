@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { analyze, parseMonth, parseNumber, type Mapping } from "./analysis";
-import { answerQuestion, explicitQuestionPlan, queryPlanSchema, verifyQuestionPlan } from "./ai";
+import { answerQuestion, explicitQuestionPlan, makePacket, queryPlanSchema, verifyQuestionPlan } from "./ai";
 import { parseCsvText } from "./csv";
 import { executeGenericQuery } from "./query";
+import { describeFact, evidenceTarget } from "./story";
 
 const mapping: Mapping = { measure: "amount", date: "date", category: "category", dateFormat: "iso", unit: "", stripCurrency: false, groupSeparator: false };
 const rows = [
@@ -85,5 +86,18 @@ describe("deterministic analysis", () => {
   it("does not infer causes or forecasts from recorded rows", () => {
     expect(explicitQuestionPlan("Why did spending rise in May?")?.intent).toBe("unsupported");
     expect(explicitQuestionPlan("Forecast next month")?.intent).toBe("unsupported");
+  });
+  it("grounds the cinema story in verified turning points", () => {
+    const csv = readFileSync(new URL("../public/examples/forgotten-cinema-ledger.csv", import.meta.url), "utf8");
+    const dataset = parseCsvText(csv, "forgotten-cinema-ledger.csv");
+    const result = analyze(dataset.rows, mapping);
+    const packet = makePacket(result);
+    expect(dataset.rows).toHaveLength(72);
+    expect(result.sum).toBe(62477);
+    expect(packet.facts.find((fact) => fact.id === "F7")).toMatchObject({ label: "Lowest month 2000-04", value: 541 });
+    expect(packet.facts.find((fact) => fact.id === "F5")).toMatchObject({ label: "Highest month 2000-10", value: 7199 });
+    const rise = packet.facts.find((fact) => fact.id === "F8")!;
+    expect(describeFact(rise)).toContain("up");
+    expect(evidenceTarget(rise)).toBe("#monthly-trend");
   });
 });

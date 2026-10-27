@@ -7,9 +7,20 @@ export type Fact = z.infer<typeof factSchema>;
 export function makePacket(result: Analysis): z.infer<typeof packetSchema> {
   const facts: Fact[] = [{ id: "F1", label: "Total", value: result.sum }, { id: "F2", label: "Average", value: result.average }, { id: "F3", label: "Minimum value", value: result.min }, { id: "F4", label: "Maximum value", value: result.max }];
   const topMonth = [...result.months].sort((a, b) => b.total - a.total)[0];
+  const lowMonth = [...result.months].sort((a, b) => a.total - b.total)[0];
   const topCategory = result.categories[0];
   if (topMonth) facts.push({ id: "F5", label: `Highest month ${topMonth.label}`, value: topMonth.total });
   if (topCategory) facts.push({ id: "F6", label: `Highest category ${topCategory.label.slice(0, 40)}`, value: topCategory.total });
+  if (lowMonth && lowMonth.label !== topMonth?.label) facts.push({ id: "F7", label: `Lowest month ${lowMonth.label}`, value: lowMonth.total });
+  const changes = result.months.slice(1).map((month, index) => ({ from: result.months[index], to: month, change: month.total - result.months[index].total }));
+  const rise = [...changes].sort((a, b) => b.change - a.change)[0];
+  const fall = [...changes].sort((a, b) => a.change - b.change)[0];
+  if (rise && rise.change > 0) facts.push({ id: "F8", label: `Largest monthly rise ${rise.from.label} to ${rise.to.label}`, value: rise.change });
+  if (fall && fall.change < 0) facts.push({ id: "F9", label: `Largest monthly fall ${fall.from.label} to ${fall.to.label}`, value: fall.change });
+  if (result.months.length > 1) {
+    facts.push({ id: "F10", label: `First month ${result.months[0].label}`, value: result.months[0].total });
+    facts.push({ id: "F11", label: `Last month ${result.months.at(-1)!.label}`, value: result.months.at(-1)!.total });
+  }
   return { facts, validRows: result.count, excludedRows: result.missing + result.invalid };
 }
 

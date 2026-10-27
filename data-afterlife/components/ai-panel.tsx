@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { answerQuestion, makePacket, queryPlanSchema, type QueryPlan } from "@/lib/ai";
 import type { Analysis, Mapping } from "@/lib/analysis";
 import { runCsvWorker } from "@/lib/worker-client";
 import type { GenericPlan, QueryResult } from "@/lib/query";
+import { evidenceTarget } from "@/lib/story";
 
 type Props = { result: Analysis; mapping: Mapping };
 type AskProps = Props & { rows: Record<string, string>[]; columns: string[] };
@@ -62,7 +63,14 @@ export function AiInsights({ result, mapping }: Props) {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [modelStatus, setModelStatus] = useState<{ available: boolean; model: string } | null>(null);
   const packet = makePacket(result);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/model-status").then((response) => response.json()).then((status) => { if (active) setModelStatus(status); }).catch(() => { if (active) setModelStatus({ available: false, model: "gemma3:4b" }); });
+    return () => { active = false; };
+  }, []);
 
   async function loadInsights() {
     setBusy(true); setMessage("");
@@ -75,11 +83,12 @@ export function AiInsights({ result, mapping }: Props) {
   }
 
   return <section className="rounded-2xl border border-[#cbd2c7] bg-white p-6" aria-labelledby="insights-heading">
-    <h3 id="insights-heading" className="text-xl font-semibold">Local AI insights</h3>
-    <p className="mt-2 text-sm text-[#657168]">Calculations come from your browser. AI interprets only the aggregate packet below. Group labels may still contain sensitive information.</p>
+    <div className="flex flex-wrap items-center justify-between gap-3"><h3 id="insights-heading" className="text-xl font-semibold">What this data remembers</h3><span className={`rounded-full px-3 py-1 text-xs font-semibold ${modelStatus?.available ? "bg-[#e3f1e7] text-[#285640]" : "bg-[#f5eee1] text-[#755a32]"}`}>{modelStatus === null ? "Checking local model…" : modelStatus.available ? `${modelStatus.model} ready` : `${modelStatus.model} offline`}</span></div>
+    <p className="mt-2 text-sm text-[#657168]">Local Gemma chooses the turning points; every figure is calculated in your browser and linked to its evidence. The model sees only aggregate facts and category labels, which may still be sensitive.</p>
     <details className="mt-4 text-sm"><summary className="cursor-pointer font-semibold">Preview facts sent to local Ollama</summary><pre className="mt-2 max-h-48 overflow-auto rounded bg-[#f3f5ef] p-3 text-xs">{JSON.stringify(packet, null, 2)}</pre></details>
-    <button disabled={busy} onClick={loadInsights} className="mt-4 rounded-lg bg-[#285640] px-4 py-2 font-semibold text-white disabled:opacity-50">Generate insights</button>
-    {insights.length > 0 && <ul className="mt-5 space-y-4">{insights.map((insight, index) => <li key={index} className="rounded-lg bg-[#f3f5ef] p-4"><p>{insight.text}</p><p className="mt-2 text-sm font-semibold">Evidence: {insight.evidenceIds.map((id) => { const fact = packet.facts.find((item) => item.id === id); return fact ? `${id} ${fact.label}: ${fact.value.toLocaleString()}${mapping.unit ? ` ${mapping.unit}` : " units (unit not specified)"}` : ""; }).join(" · ")}</p></li>)}</ul>}
+    <button disabled={busy || !modelStatus?.available} onClick={loadInsights} className="mt-4 rounded-lg bg-[#285640] px-4 py-2 font-semibold text-white disabled:opacity-50">{busy ? "Recovering story…" : "Recover its story with Gemma"}</button>
+    {modelStatus && !modelStatus.available && <p className="mt-2 text-sm text-[#755a32]">To enable the story, run <code>ollama pull {modelStatus.model}</code> and start Ollama, then refresh this page.</p>}
+    {insights.length > 0 && <ol className="mt-5 grid gap-3 md:grid-cols-2">{insights.map((insight, index) => <li key={index} className="rounded-xl border border-[#d5dfd2] bg-[#f3f5ef] p-4"><p className="text-xs font-bold uppercase tracking-widest text-[#56806a]">Memory {index + 1}</p><p className="mt-2 text-lg leading-snug">{insight.text}{mapping.unit && <span className="ml-1 text-sm text-[#657168]">({mapping.unit})</span>}</p><div className="mt-3 flex flex-wrap gap-2">{insight.evidenceIds.map((id) => { const fact = packet.facts.find((item) => item.id === id); return fact ? <a key={id} href={evidenceTarget(fact)} className="rounded-full border border-[#a8b9a9] px-3 py-1 text-xs font-semibold text-[#285640] hover:bg-[#e8eee7]">Evidence {id} · view {evidenceTarget(fact) === "#monthly-trend" ? "trend" : evidenceTarget(fact) === "#category-totals" ? "category" : "summary"}</a> : null; })}</div></li>)}</ol>}
     {message && <p className="mt-5 rounded-lg bg-amber-50 p-4 text-amber-900" role="status">{message}</p>}
   </section>;
 }
