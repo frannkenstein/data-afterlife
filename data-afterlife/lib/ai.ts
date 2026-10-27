@@ -29,6 +29,9 @@ const unsupported = (reason: string): QueryPlan => ({ intent: "unsupported", rea
 
 export function explicitQuestionPlan(question: string): QueryPlan | null {
   const text = question.trim().toLowerCase();
+  if (/\b(average|mean)\b/.test(text) && /\b(lowest|highest|smallest|largest|top|bottom|first|last)\b/.test(text)) {
+    return unsupported("Only the overall average is supported; averages of selected rows or groups are not available yet.");
+  }
   if (/\b(second|2nd|runner[\s-]?up)\b/.test(text)) {
     if (/\b(highest|largest|biggest)\b/.test(text) && /\bmonths?\b/.test(text)) return { intent: "second_highest_month" };
     return unsupported("I can answer the second-highest month, but this wording is not clear enough.");

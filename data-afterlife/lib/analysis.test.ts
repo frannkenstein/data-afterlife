@@ -63,4 +63,9 @@ describe("deterministic analysis", () => {
     const oneMonth = analyze([{ date: "2024-01-01", category: "A", amount: "20" }], mapping);
     expect(answerQuestion({ intent: "second_highest_month" }, oneMonth, mapping).answer).toBe("No second-highest month is available.");
   });
+  it("rejects averages over selected lowest values", () => {
+    const question = "What is the average of the three lowest amounts?";
+    expect(explicitQuestionPlan(question)?.intent).toBe("unsupported");
+    expect(verifyQuestionPlan(question, { intent: "average" }).intent).toBe("unsupported");
+  });
 });
